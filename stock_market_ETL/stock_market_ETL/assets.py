@@ -4,6 +4,7 @@ import os
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
+from xgboost import Booster
 
 import pandas as pd
 import xgboost as xgb
@@ -13,8 +14,6 @@ from sklearn.model_selection import train_test_split
 
 # Edit this on other systems
 path = Path(r"D:\projects\stock_market_data_pipeline\data")
-
-
 def download_kaggle_dataset() -> None:
     os.system('kaggle datasets download -d jacksoncrow/stock-market-dataset')
 
