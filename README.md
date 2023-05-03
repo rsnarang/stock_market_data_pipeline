@@ -6,6 +6,7 @@ Note: The computer I developed this on has strong specs such as an NVidia 2070 S
 - Run time for the pipeline through Dagster was 10 minutes 06 seconds.
 - Improvements can be made through the use of Iterator objects to reduce memory usage
 - Functions can be broken down further for multiprocessing
+- Asyncio would also improve functionality
 
 Problem 1: 
 - Incorporated multithreading due to I/O bound computations for loading csv files.
