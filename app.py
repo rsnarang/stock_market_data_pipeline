@@ -206,7 +206,7 @@ def train_ml_model():
     mse = mean_squared_error(y_test, y_pred)
     return (y_pred, mae, mse)
 
-@graph
+
 def main():
     start = time()
     df_dict = create_file_df_dict()
@@ -218,3 +218,6 @@ def main():
     df = eng_features(df)
     train_ml_model()
     end = time()
+
+if __name__ == "__main__":
+    main()
