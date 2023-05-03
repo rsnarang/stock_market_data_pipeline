@@ -2,8 +2,10 @@
 Dagster data pipeline with an ML predictor for all securities data.
 
 Note: The computer I developed this on has strong specs such as an NVidia 2070 Super, AMD Ryzen 3600 12 core, 16 GB ram. 
-Run time for the scripts, directly, was 3 minutes 46 seconds.
-Run time for the pipeline through Dagster was 10 minutes 06 seconds.
+- Run time for the scripts, directly, was 3 minutes 46 seconds.
+- Run time for the pipeline through Dagster was 10 minutes 06 seconds.
+- Improvements can be made through the use of Iterator objects to reduce memory usage
+- Functions can be broken down further for multiprocessing
 
 Problem 1: 
 - Incorporated multithreading due to I/O bound computations for loading csv files.
