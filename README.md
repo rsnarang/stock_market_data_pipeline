@@ -30,7 +30,10 @@ and change the values as you'd like.
 - Tested the API using Postman and kept it as barebones as possible.
 - Should use an async for requests. Note that this server can easily be overloaded and crash.
 
+
 Pipeline diagram:
+- The pipeline might seem completely linear but it doesn't display the different ops involved in computing.
+
 ![Pipeline](pipeline.PNG)
 
 Credit: 
