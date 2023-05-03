@@ -1,15 +1,13 @@
 import glob
 import json
 import os
-import gc
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-from dagster import asset, graph
 from pathlib import Path
-from time import time
 
 import pandas as pd
 import xgboost as xgb
+from dagster import asset
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import train_test_split
 
@@ -26,12 +24,14 @@ def extract_kaggle_dataset(path: Path) -> None:
         zip_file.extractall()
 
 
-def get_kaggle_data() -> None:
+@asset
+def get_kaggle_data():
     global path
-    path = Path(f"{path}")
-    path.mkdir(parents=True, exist_ok=True)
+    file_path = Path(f"{path}")
+    file_path.mkdir(parents=True, exist_ok=True)
     download_kaggle_dataset()
-    extract_kaggle_dataset(path)
+    extract_kaggle_dataset(file_path)
+    return path
 
 
 # We're ready to go
@@ -51,40 +51,43 @@ def get_symbol(path: str) -> str:
     return symbol
 
 
+@asset
 # Multithreading due to being I/O bound
 def create_file_df_dict() -> dict:
     global path
     stock_files = get_file_list(f"{path}/stocks")
     etf_files = get_file_list(f"{path}/etfs")
     file_df_dict = {}
+
     with ThreadPoolExecutor() as executor:
         stock_futures = {executor.submit(load_file, file): file for file in stock_files}
         etf_futures = {executor.submit(load_file, file): file for file in etf_files}
 
-        for future in as_completed(stock_futures):
-            symbol = get_symbol(stock_futures[future])
-            file_df_dict[symbol] = future.result()
-        #
-        for future in as_completed(etf_futures):
-            symbol = get_symbol(etf_futures[future])
-            file_df_dict[symbol] = future.result()
+    for future in as_completed(stock_futures):
+        symbol = get_symbol(stock_futures[future])
+        file_df_dict[symbol] = future.result()
+    #
+    for future in as_completed(etf_futures):
+        symbol = get_symbol(etf_futures[future])
+        file_df_dict[symbol] = future.result()
 
     return file_df_dict
 
 
-def make_symbol_dict() -> None:
+def make_symbol_dict():
     global path
     meta_path = f"{path}/symbols_valid_meta.csv"
     df = pd.read_csv(meta_path, engine='pyarrow')
     symbol_dict = df.set_index('NASDAQ Symbol')['Security Name'].to_dict()
     with open(f"{path}/symbol_dict.json", "w") as file_path:
         json.dump(symbol_dict, file_path)
+    return file_path
 
 
 def get_symbol_name_dict() -> dict:
     global path
     meta_path = f"{path}"
-    with open(f"{path}/symbol_dict.json", "r") as file_path:
+    with open(f"{meta_path}/symbol_dict.json", "r") as file_path:
         symbol_dict = json.load(file_path)
 
     return symbol_dict
@@ -107,13 +110,13 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # Parallel
-def transform_all_dfs(file_df_dict: dict) -> None:
-    make_symbol_dict()
-    symbol_df_tuple_list = list(file_df_dict.items())
+@asset
+def transform_all_dfs(create_file_df_dict: dict) -> pd.DataFrame:
+    symbol_df_tuple_list = list(create_file_df_dict.items())
     with ProcessPoolExecutor() as pool:
         df_list = pool.map(transform_each_df, symbol_df_tuple_list)
     transformed_df = pd.concat(df_list, axis=0)
-    save_transformed_df(transformed_df)
+    return transformed_df
 
 
 def downcast_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -126,7 +129,9 @@ def downcast_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def save_transformed_df(transformed_df: pd.DataFrame) -> None:
+@asset
+def save_transformed_df(transform_all_dfs: pd.DataFrame):
+    transformed_df = transform_all_dfs
     global path
     work_path = Path(f"{path}/transformed")
     work_path.mkdir(parents=True, exist_ok=True)
@@ -139,9 +144,11 @@ def save_transformed_df(transformed_df: pd.DataFrame) -> None:
                                             'Volume': 'int32'})
     transformed_df.sort_values(by=['Symbol', 'Date'], inplace=True)
     pd.DataFrame.to_parquet(transformed_df, f"{work_path}/transformed_df.parquet")
+    return transformed_df
 
 
-def get_transformed_df() -> pd.DataFrame:
+@asset
+def get_transformed_df(save_transformed_df: pd.DataFrame) -> pd.DataFrame:
     global path
     work_path = Path(f"{path}/transformed/transformed_df.parquet")
     df = pd.read_parquet(str(work_path))
@@ -162,11 +169,12 @@ def adj_close_rolling_median(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def eng_features(df: pd.DataFrame) -> pd.DataFrame:
+@asset
+def eng_features(get_transformed_df) -> pd.DataFrame:
     global path
     work_path = Path(f"{path}/transformed/final")
     work_path.mkdir(parents=True, exist_ok=True)
-    df = moving_average(df)
+    df = moving_average(get_transformed_df)
     df = adj_close_rolling_median(df)
     df.set_index('Date', inplace=True)
     df.dropna(inplace=True)
@@ -174,17 +182,19 @@ def eng_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def get_final_df() -> pd.DataFrame:
+@asset
+def get_final_df(eng_features) -> pd.DataFrame:
     global path
     work_path = Path(f"{path}/transformed/final")
     df = pd.read_parquet(f"{work_path}/final_df.parquet")
     return df
 
 
-def train_ml_model():
+@asset
+def train_ml_model(get_final_df):
     global path
     work_path = Path(f"{path}/transformed/final")
-    df = get_final_df()
+    df = get_final_df
 
     features = ['vol_moving_avg', 'adj_close_rolling_med']
     target = 'Volume'
@@ -207,16 +217,15 @@ def train_ml_model():
     mse = mean_squared_error(y_test, y_pred)
     return (y_pred, mae, mse)
 
-@graph
-def main():
-    start = time()
-    df_dict = create_file_df_dict()
-    gc.collect()
-    transform_all_dfs(df_dict)
-    pd.set_option('display.max_columns', None)
-    gc.collect()
-    df = get_transformed_df()
-    df = eng_features(df)
-    train_ml_model()
-    end = time()
-
+# @graph
+# def main():
+#     start = time()
+#     df_dict = create_file_df_dict()
+#     gc.collect()
+#     transform_all_dfs(df_dict)
+#     pd.set_option('display.max_columns', None)
+#     gc.collect()
+#     df = get_transformed_df()
+#     df = eng_features(df)
+#     train_ml_model()
+#     end = time()
