@@ -27,7 +27,7 @@ Problem 3:
 - I was also able to decrease memory consumption significantly which is important as Sklearn's tree regression algorithms can cause memory errors due to the number of trees being produced.
 
 Problem 4: Use  
-`POST http://rockysn.pythonanywhere.com/predict?vol_moving_avg=51318&adj_close_rolling_med=216`
+`GET http://rockysn.pythonanywhere.com/predict?vol_moving_avg=51318&adj_close_rolling_med=216`
 and change the values as you'd like.
 
 - Tested the API using Postman and kept it as barebones as possible.
