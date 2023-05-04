@@ -13,7 +13,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import train_test_split
 
 # Edit this on other systems
-path = Path(r"D:\projects\stock_market_data_pipeline\data")
+path = Path(r"./")
 def download_kaggle_dataset() -> None:
     os.system('kaggle datasets download -d jacksoncrow/stock-market-dataset')
 
@@ -52,7 +52,7 @@ def get_symbol(path: str) -> str:
 
 @asset
 # Multithreading due to being I/O bound
-def create_file_df_dict() -> dict:
+def create_file_df_dict(get_kaggle_data) -> dict:
     global path
     stock_files = get_file_list(f"{path}/stocks")
     etf_files = get_file_list(f"{path}/etfs")
